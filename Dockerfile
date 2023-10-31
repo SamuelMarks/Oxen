@@ -1,13 +1,13 @@
 FROM arm64v8/rust:1.73.0 as builder
 
 USER root
-RUN apt-get update
-RUN apt-get install -y apt-utils
-RUN apt-get install -y clang libavcodec-dev libavformat-dev libavfilter-dev libavdevice-dev libavutil-dev libssl-dev pkg-config
+# RUN apt-get update
+# RUN apt-get install -y apt-utils
+# RUN apt-get install -y clang libavcodec-dev libavformat-dev libavfilter-dev libavdevice-dev libavutil-dev libssl-dev pkg-config
 
-RUN apt-get update \
- && apt-get -y install curl build-essential clang cmake pkg-config libjpeg-turbo-progs libpng-dev \
- && rm -rfv /var/lib/apt/lists/*
+# RUN apt-get update \
+#  && apt-get -y install curl build-essential clang cmake pkg-config libjpeg-turbo-progs libpng-dev \
+#  && rm -rfv /var/lib/apt/lists/*
 
 # ENV MAGICK_VERSION 7.1
 
