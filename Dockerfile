@@ -1,4 +1,4 @@
-FROM rust:1.71.0 as builder
+FROM arm64v8/rust:1.73.0 as builder
 
 USER root
 RUN apt-get update
@@ -45,7 +45,7 @@ COPY src src
 RUN cargo build --release --bin oxen-server
 
 # Minimal image to run the binary (without Rust toolchain)
-FROM debian:bullseye-slim AS runtime
+FROM rust:1.73.0-slim AS runtime
 WORKDIR /oxen-server
 COPY --from=builder /usr/src/oxen-server/target/release/oxen-server /usr/local/bin
 ENV SYNC_DIR=/var/oxen/data
