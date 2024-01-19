@@ -141,20 +141,25 @@ impl CompareDerivedDF {
     pub fn from_compare_info(
         name: &str,
         compare_id: Option<&str>,
-        left_commit_id: &str,
-        right_commit_id: &str,
+        left_commit_entry: Option<&CommitEntry>,
+        right_commit_entry: Option<&CommitEntry>,
         df: DataFrame,
         schema: Schema,
     ) -> CompareDerivedDF {
-        let resource = compare_id.map(|compare_id| CompareVirtualResource {
-            path: format!(
-                "/compare/data_frame/{}/{}/{}..{}",
-                compare_id, name, left_commit_id, right_commit_id
-            ),
-            base: left_commit_id.to_owned(),
-            head: right_commit_id.to_owned(),
-            resource: format!("{}/{}", compare_id, name),
-        });
+        let resource = match (compare_id, left_commit_entry, right_commit_entry) {
+            (Some(compare_id), Some(left_commit_entry), Some(right_commit_entry)) => {
+                Some(CompareVirtualResource {
+                    path: format!(
+                        "/compare/data_frame/{}/{}/{}..{}",
+                        compare_id, name, left_commit_entry.commit_id, right_commit_entry.commit_id
+                    ),
+                    base: left_commit_entry.commit_id.to_owned(),
+                    head: right_commit_entry.commit_id.to_owned(),
+                    resource: format!("{}/{}", compare_id, name),
+                })
+            }
+            _ => None,
+        };
 
         CompareDerivedDF {
             name: name.to_owned(),

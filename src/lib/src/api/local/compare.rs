@@ -1,6 +1,7 @@
 use crate::constants::{CACHE_DIR, COMPARES_DIR, LEFT_COMPARE_COMMIT, RIGHT_COMPARE_COMMIT};
 use crate::core::df::tabular::{self};
 use crate::error::OxenError;
+use crate::model::entry::commit_entry::CompareEntry;
 use crate::model::{CommitEntry, DataFrameSize, LocalRepository, Schema};
 use crate::opts::DFOpts;
 
@@ -8,10 +9,12 @@ use crate::view::compare::{CompareDerivedDF, CompareDupes, CompareSourceDF, Comp
 use crate::view::schema::SchemaWithPath;
 use crate::{api, util};
 
-use polars::prelude::ChunkCompare;
-use polars::prelude::{DataFrame, DataFrameJoinOps};
+use polars::prelude::DataFrame;
 use std::collections::HashMap;
 use std::path::PathBuf;
+
+pub mod hash_compare;
+pub mod join_compare;
 
 const LEFT: &str = "left";
 const RIGHT: &str = "right";
@@ -26,22 +29,20 @@ const DUPES_PATH: &str = "dupes.json";
 pub fn compare_files(
     repo: &LocalRepository,
     compare_id: Option<&str>,
-    entry_1: CommitEntry,
-    entry_2: CommitEntry,
+    compare_entry_1: CompareEntry,
+    compare_entry_2: CompareEntry,
     keys: Vec<String>,
     targets: Vec<String>,
     output: Option<PathBuf>,
 ) -> Result<CompareTabular, OxenError> {
     // Assert that the files exist in their respective commits and are tabular.
-    let version_file_1 =
-        api::local::diff::get_version_file_from_commit_id(repo, &entry_1.commit_id, &entry_1.path)?;
-    let version_file_2 =
-        api::local::diff::get_version_file_from_commit_id(repo, &entry_2.commit_id, &entry_2.path)?;
+    let version_file_1 = get_version_file(repo, &compare_entry_1)?;
+    let version_file_2 = get_version_file(repo, &compare_entry_2)?;
 
     if !util::fs::is_tabular(&version_file_1) || !util::fs::is_tabular(&version_file_2) {
         return Err(OxenError::invalid_file_type(format!(
             "Compare not supported for non-tabular files, found {:?} and {:?}",
-            entry_1.path, entry_2.path
+            compare_entry_1.path, compare_entry_2.path
         )));
     }
 
@@ -77,7 +78,15 @@ pub fn compare_files(
         .collect::<Vec<&str>>();
 
     let compare = compute_row_comparison(
-        repo, compare_id, df_1, df_2, entry_1, entry_2, keys, targets, output,
+        repo,
+        compare_id,
+        df_1,
+        df_2,
+        compare_entry_1,
+        compare_entry_2,
+        keys,
+        targets,
+        output,
     )?;
 
     Ok(compare)
@@ -86,8 +95,8 @@ pub fn compare_files(
 pub fn get_cached_compare(
     repo: &LocalRepository,
     compare_id: &str,
-    left_entry: &CommitEntry,
-    right_entry: &CommitEntry,
+    compare_entry_1: CompareEntry,
+    compare_entry_2: CompareEntry,
 ) -> Result<Option<CompareTabular>, OxenError> {
     // Check if commits have cahnged since LEFT and RIGHT files were last cached
     let (cached_left_id, cached_right_id) = get_compare_commit_ids(repo, compare_id)?;
@@ -97,8 +106,15 @@ pub fn get_cached_compare(
         return Ok(None);
     }
 
-    if cached_left_id.unwrap() != left_entry.commit_id
-        || cached_right_id.unwrap() != right_entry.commit_id
+    if compare_entry_1.commit_entry.is_none() || compare_entry_2.commit_entry.is_none() {
+        return Ok(None);
+    }
+
+    let left_commit = compare_entry_1.commit_entry.unwrap();
+    let right_commit = compare_entry_2.commit_entry.unwrap();
+
+    if cached_left_id.unwrap() != left_commit.commit_id
+        || cached_right_id.unwrap() != right_commit.commit_id
     {
         return Ok(None);
     }
@@ -106,28 +122,28 @@ pub fn get_cached_compare(
     let left_full_df = tabular::read_df(
         api::local::diff::get_version_file_from_commit_id(
             repo,
-            &left_entry.commit_id,
-            &left_entry.path,
+            &left_commit.commit_id,
+            &compare_entry_1.path,
         )?,
         DFOpts::empty(),
     )?;
     let right_full_df = tabular::read_df(
         api::local::diff::get_version_file_from_commit_id(
             repo,
-            &right_entry.commit_id,
-            &right_entry.path,
+            &right_commit.commit_id,
+            &compare_entry_2.path,
         )?,
         DFOpts::empty(),
     )?;
 
     let left_schema = SchemaWithPath {
         schema: Schema::from_polars(&left_full_df.schema()),
-        path: left_entry.path.to_str().map(|s| s.to_owned()).unwrap(),
+        path: compare_entry_1.path.to_str().map(|s| s.to_owned()).unwrap(),
     };
 
     let right_schema = SchemaWithPath {
         schema: Schema::from_polars(&right_full_df.schema()),
-        path: right_entry.path.to_str().map(|s| s.to_owned()).unwrap(),
+        path: compare_entry_2.path.to_str().map(|s| s.to_owned()).unwrap(),
     };
 
     let match_df = tabular::read_df(get_compare_match_path(repo, compare_id), DFOpts::empty())?;
@@ -144,45 +160,45 @@ pub fn get_cached_compare(
     let source_df_left = CompareSourceDF::from_name_df_entry_schema(
         LEFT,
         left_full_df,
-        left_entry,
+        &left_commit,
         left_schema.schema.clone(),
     );
     let source_df_right = CompareSourceDF::from_name_df_entry_schema(
         RIGHT,
         right_full_df,
-        right_entry,
+        &right_commit,
         right_schema.schema.clone(),
     );
 
     let derived_df_match = CompareDerivedDF::from_compare_info(
         MATCH,
         Some(compare_id),
-        &left_entry.commit_id,
-        &right_entry.commit_id,
+        Some(&left_commit),
+        Some(&right_commit),
         match_df,
         match_schema,
     );
     let derived_df_diff = CompareDerivedDF::from_compare_info(
         DIFF,
         Some(compare_id),
-        &left_entry.commit_id,
-        &right_entry.commit_id,
+        Some(&left_commit),
+        Some(&right_commit),
         diff_df,
         diff_schema,
     );
     let derived_df_left_only = CompareDerivedDF::from_compare_info(
         LEFT_ONLY,
         Some(compare_id),
-        &left_entry.commit_id,
-        &right_entry.commit_id,
+        Some(&left_commit),
+        Some(&right_commit),
         left_only_df,
         left_only_schema,
     );
     let derived_df_right_only = CompareDerivedDF::from_compare_info(
         RIGHT_ONLY,
         Some(compare_id),
-        &left_entry.commit_id,
-        &right_entry.commit_id,
+        Some(&left_commit),
+        Some(&right_commit),
         right_only_df,
         right_only_schema,
     );
@@ -300,8 +316,8 @@ fn write_compare_dfs(
 fn write_compare_commit_ids(
     repo: &LocalRepository,
     compare_id: &str,
-    left_id: &str,
-    right_id: &str,
+    left_entry: &Option<CommitEntry>,
+    right_entry: &Option<CommitEntry>,
 ) -> Result<(), OxenError> {
     let compare_dir = get_compare_dir(repo, compare_id);
 
@@ -312,8 +328,15 @@ fn write_compare_commit_ids(
     let left_path = compare_dir.join(LEFT_COMPARE_COMMIT);
     let right_path = compare_dir.join(RIGHT_COMPARE_COMMIT);
 
-    std::fs::write(left_path, left_id)?;
-    std::fs::write(right_path, right_id)?;
+    if let Some(commit_entry) = left_entry {
+        let left_id = &commit_entry.commit_id;
+        std::fs::write(left_path, left_id)?;
+    }
+
+    if let Some(commit_entry) = right_entry {
+        let right_id = &commit_entry.commit_id;
+        std::fs::write(right_path, right_id)?;
+    }
 
     Ok(())
 }
@@ -348,14 +371,14 @@ fn compute_row_comparison(
     compare_id: Option<&str>,
     df_1: DataFrame,
     df_2: DataFrame,
-    entry_1: CommitEntry,
-    entry_2: CommitEntry,
+    compare_entry_1: CompareEntry,
+    compare_entry_2: CompareEntry,
     keys: Vec<&str>,
     targets: Vec<&str>,
     output: Option<PathBuf>,
 ) -> Result<CompareTabular, OxenError> {
-    let path_1 = entry_1.path.clone();
-    let path_2 = entry_2.path.clone();
+    let path_1 = compare_entry_1.path.clone();
+    let path_2 = compare_entry_2.path.clone();
 
     let og_schema_1 = SchemaWithPath {
         path: path_1.as_os_str().to_str().map(|s| s.to_owned()).unwrap(),
@@ -374,23 +397,20 @@ fn compute_row_comparison(
     let df_1_size = DataFrameSize::from_df(&df_1);
     let df_2_size = DataFrameSize::from_df(&df_2);
 
-    // TODO: unsure if hash comparison or join is faster here - would guess join, could use some testing
-    let (df_1, df_2) = hash_dfs(df_1, df_2, keys.clone(), targets.clone())?;
+    let mut dupes = CompareDupes { left: 0, right: 0 };
 
-    let n_dupes_1 = tabular::n_duped_rows(&df_1, &[KEYS_HASH_COL])?;
-    let n_dupes_2 = tabular::n_duped_rows(&df_2, &[KEYS_HASH_COL])?;
+    let (mut diff_df, mut match_df, mut left_only_df, mut right_only_df) = if keys.is_empty() {
+        hash_compare::compare(&df_1, &df_2, &og_schema_1.schema)?
+    } else {
+        // TODO: unsure if hash comparison or join is faster here - would guess join, could use some testing
+        let (df_1, df_2) = hash_dfs(df_1, df_2, keys.clone(), targets.clone())?;
+        dupes = CompareDupes {
+            left: tabular::n_duped_rows(&df_1, &[KEYS_HASH_COL])?,
+            right: tabular::n_duped_rows(&df_2, &[KEYS_HASH_COL])?,
+        };
 
-    let dupes = CompareDupes {
-        left: n_dupes_1,
-        right: n_dupes_2,
+        join_compare::compare(df_1, df_2, targets.clone(), keys.clone())?
     };
-
-    let joined_df = join_hashed_dfs(df_1, df_2, targets.clone())?;
-
-    let mut diff_df = calculate_diff_df(&joined_df, targets.clone(), keys.clone())?;
-    let mut match_df = calculate_match_df(&joined_df, targets.clone(), keys.clone())?;
-    let mut left_only_df = calculate_left_df(&joined_df, targets.clone(), keys.clone())?;
-    let mut right_only_df = calculate_right_df(&joined_df, targets.clone(), keys.clone())?;
 
     let diff_schema = Schema::from_polars(&diff_df.schema());
     let match_schema = Schema::from_polars(&match_df.schema());
@@ -399,7 +419,12 @@ fn compute_row_comparison(
 
     // Cache if we have a compare_id - i.e., if called from server
     if let Some(compare_id) = compare_id {
-        write_compare_commit_ids(repo, compare_id, &entry_1.commit_id, &entry_2.commit_id)?;
+        write_compare_commit_ids(
+            repo,
+            compare_id,
+            &compare_entry_1.commit_entry,
+            &compare_entry_1.commit_entry,
+        )?;
         write_compare_dfs(
             repo,
             compare_id,
@@ -435,48 +460,54 @@ fn compute_row_comparison(
     let derived_df_match = CompareDerivedDF::from_compare_info(
         MATCH,
         compare_id,
-        &entry_1.commit_id,
-        &entry_2.commit_id,
+        compare_entry_1.commit_entry.as_ref(),
+        compare_entry_2.commit_entry.as_ref(),
         match_df,
         match_schema,
     );
     let derived_df_diff = CompareDerivedDF::from_compare_info(
         DIFF,
         compare_id,
-        &entry_1.commit_id,
-        &entry_2.commit_id,
+        compare_entry_1.commit_entry.as_ref(),
+        compare_entry_2.commit_entry.as_ref(),
         diff_df,
         diff_schema,
     );
     let derived_df_left_only = CompareDerivedDF::from_compare_info(
         LEFT_ONLY,
         compare_id,
-        &entry_1.commit_id,
-        &entry_2.commit_id,
+        compare_entry_1.commit_entry.as_ref(),
+        compare_entry_2.commit_entry.as_ref(),
         left_only_df,
         left_only_schema,
     );
     let derived_df_right_only = CompareDerivedDF::from_compare_info(
         RIGHT_ONLY,
         compare_id,
-        &entry_1.commit_id,
-        &entry_2.commit_id,
+        compare_entry_1.commit_entry.as_ref(),
+        compare_entry_2.commit_entry.as_ref(),
         right_only_df,
         right_only_schema,
     );
 
     let source_df_left = CompareSourceDF {
         name: LEFT.to_string(),
-        path: entry_1.path.clone(),
-        version: entry_1.commit_id.clone(),
+        path: compare_entry_1.path.clone(),
+        version: compare_entry_1
+            .commit_entry
+            .map(|c| c.commit_id)
+            .unwrap_or("".to_owned()),
         schema: og_schema_1.schema.clone(),
         size: df_1_size,
     };
 
     let source_df_right = CompareSourceDF {
         name: RIGHT.to_string(),
-        path: entry_2.path.clone(),
-        version: entry_2.commit_id.clone(),
+        path: compare_entry_2.path.clone(),
+        version: compare_entry_2
+            .commit_entry
+            .map(|c| c.commit_id)
+            .unwrap_or("".to_owned()),
         schema: og_schema_2.schema.clone(),
         size: df_2_size,
     };
@@ -524,122 +555,19 @@ fn hash_dfs(
     Ok((left_df, right_df))
 }
 
-fn join_hashed_dfs(
-    left_df: DataFrame,
-    right_df: DataFrame,
-    targets: Vec<&str>,
-) -> Result<DataFrame, OxenError> {
-    let mut joined_df = left_df.outer_join(&right_df, [KEYS_HASH_COL], [KEYS_HASH_COL])?;
-
-    let mut cols_to_rename = targets.clone();
-    cols_to_rename.push(TARGETS_HASH_COL);
-
-    for target in cols_to_rename.iter() {
-        log::debug!("trying to rename col: {}", target);
-        let left_before = target.to_string();
-        let left_after = format!("{}.left", target);
-        let right_before = format!("{}_right", target);
-        let right_after = format!("{}.right", target);
-        joined_df.rename(&left_before, &left_after)?;
-        joined_df.rename(&right_before, &right_after)?;
+fn get_version_file(
+    repo: &LocalRepository,
+    compare_entry: &CompareEntry,
+) -> Result<PathBuf, OxenError> {
+    if let Some(commit_entry) = &compare_entry.commit_entry {
+        api::local::diff::get_version_file_from_commit_id(
+            repo,
+            &commit_entry.commit_id,
+            &commit_entry.path,
+        )
+    } else {
+        Ok(compare_entry.path.clone())
     }
-
-    Ok(joined_df)
-}
-
-fn calculate_diff_df(
-    df: &DataFrame,
-    targets: Vec<&str>,
-    keys: Vec<&str>,
-) -> Result<DataFrame, OxenError> {
-    let diff_mask = df
-        .column(format!("{}.left", TARGETS_HASH_COL).as_str())?
-        .not_equal(df.column(format!("{}.right", TARGETS_HASH_COL).as_str())?)?;
-    let diff_df = df.filter(&diff_mask)?;
-
-    let mut cols_to_keep: Vec<String> = keys
-        .iter()
-        .map(|&field| field.to_string())
-        .collect::<Vec<String>>();
-
-    for target in targets.iter() {
-        cols_to_keep.push(format!("{}.left", target));
-        cols_to_keep.push(format!("{}.right", target));
-    }
-
-    Ok(diff_df.select(&cols_to_keep)?)
-}
-
-fn calculate_match_df(
-    df: &DataFrame,
-    targets: Vec<&str>,
-    keys: Vec<&str>,
-) -> Result<DataFrame, OxenError> {
-    let match_mask = df
-        .column(format!("{}.left", TARGETS_HASH_COL).as_str())?
-        .equal(df.column(format!("{}.right", TARGETS_HASH_COL).as_str())?)?;
-
-    let mut match_df = df.filter(&match_mask)?;
-
-    for target in targets.iter() {
-        let left_before = format!("{}.left", target);
-        let left_after = target.to_string();
-        match_df.rename(&left_before, &left_after)?;
-    }
-
-    let cols_to_keep = keys.iter().chain(targets.iter()).copied();
-
-    Ok(match_df.select(cols_to_keep)?)
-}
-
-fn calculate_left_df(
-    df: &DataFrame,
-    targets: Vec<&str>,
-    keys: Vec<&str>,
-) -> Result<DataFrame, OxenError> {
-    let keys_and_targets = keys
-        .iter()
-        .chain(targets.iter())
-        .copied()
-        .collect::<Vec<&str>>();
-
-    let mut left_only = df.filter(
-        &df.column(format!("{}.right", targets[0]).as_str())?
-            .is_null(),
-    )?;
-
-    for target in targets.iter() {
-        let left_before = format!("{}.left", target);
-        let left_after = target.to_string();
-        left_only.rename(&left_before, &left_after)?;
-    }
-
-    Ok(left_only.select(keys_and_targets.clone())?)
-}
-
-fn calculate_right_df(
-    df: &DataFrame,
-    targets: Vec<&str>,
-    keys: Vec<&str>,
-) -> Result<DataFrame, OxenError> {
-    let keys_and_targets = keys
-        .iter()
-        .chain(targets.iter())
-        .copied()
-        .collect::<Vec<&str>>();
-
-    let mut right_only = df.filter(
-        &df.column(format!("{}.left", targets[0]).as_str())?
-            .is_null(),
-    )?;
-
-    for target in targets.iter() {
-        let right_before = format!("{}.right", target);
-        let right_after = target.to_string();
-        right_only.rename(&right_before, &right_after)?;
-    }
-
-    Ok(right_only.select(keys_and_targets.clone())?)
 }
 
 #[cfg(test)]

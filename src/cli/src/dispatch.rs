@@ -518,7 +518,7 @@ pub async fn diff(commit_id: Option<&str>, path: &str, remote: bool) -> Result<(
 pub fn compare(
     file_1: PathBuf,
     revision_1: Option<&str>,
-    file_2: PathBuf,
+    file_2: Option<PathBuf>,
     revision_2: Option<&str>,
     keys: Vec<String>,
     targets: Vec<String>,
@@ -528,23 +528,50 @@ pub fn compare(
     let repository = LocalRepository::from_dir(&repo_dir)?;
     check_repo_migration_needed(&repository)?;
 
-    let current_commit = api::local::commits::head_commit(&repository)?;
-    // For revision_1 and revision_2, if none, set to current_commit
-    let revision_1 = revision_1.unwrap_or(current_commit.id.as_str());
-    let revision_2 = revision_2.unwrap_or(current_commit.id.as_str());
+    let (cpath_1, cpath_2) = if let Some(file_2) = file_2 {
+        let cpath_1 = if let Some(revison) = revision_1 {
+            let commit_1 = api::local::revisions::get(&repository, revison)?;
 
-    let commit_1 = api::local::revisions::get(&repository, revision_1)?
-        .ok_or_else(|| OxenError::revision_not_found(revision_1.into()))?;
-    let commit_2 = api::local::revisions::get(&repository, revision_2)?
-        .ok_or_else(|| OxenError::revision_not_found(revision_2.into()))?;
+            CommitPath {
+                commit: commit_1,
+                path: file_1.clone(),
+            }
+        } else {
+            CommitPath {
+                commit: None,
+                path: file_1.clone(),
+            }
+        };
 
-    let cpath_1 = CommitPath {
-        commit: commit_1,
-        path: file_1,
-    };
-    let cpath_2 = CommitPath {
-        commit: commit_2,
-        path: file_2,
+        let cpath_2 = if let Some(revison) = revision_2 {
+            let commit = api::local::revisions::get(&repository, revison)?;
+
+            CommitPath {
+                commit,
+                path: file_2,
+            }
+        } else {
+            CommitPath {
+                commit: None,
+                path: file_2,
+            }
+        };
+
+        (cpath_1, cpath_2)
+    } else {
+        // if there are no second file, compare with same file at the latest commit
+        let commit = Some(api::local::commits::head_commit(&repository)?);
+
+        (
+            CommitPath {
+                commit,
+                path: file_1.clone(),
+            },
+            CommitPath {
+                commit: None,
+                path: file_1.clone(),
+            },
+        )
     };
 
     command::compare(&repository, cpath_1, cpath_2, keys, targets, output)?;

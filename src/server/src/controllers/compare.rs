@@ -121,52 +121,6 @@ pub async fn entries(
     Ok(HttpResponse::Ok().json(view))
 }
 
-pub async fn file(
-    req: HttpRequest,
-    query: web::Query<DFOptsQuery>,
-) -> actix_web::Result<HttpResponse, OxenHttpError> {
-    let app_data = app_data(&req)?;
-    let namespace = path_param(&req, "namespace")?;
-    let name = path_param(&req, "repo_name")?;
-    let base_head = path_param(&req, "base_head")?;
-
-    // Get the repository or return error
-    let repository = get_repo(&app_data.path, namespace, name)?;
-
-    // Parse the base and head from the base..head/resource string
-    // For Example)
-    //   main..feature/add-data/path/to/file.txt
-    let (base_commit, head_commit, resource) = parse_base_head_resource(&repository, &base_head)?;
-
-    let base_entry = api::local::entries::get_commit_entry(&repository, &base_commit, &resource)?;
-    let head_entry = api::local::entries::get_commit_entry(&repository, &head_commit, &resource)?;
-
-    let mut opts = DFOpts::empty();
-    opts = df_opts_query::parse_opts(&query, &mut opts);
-
-    let page_size = query.page_size.unwrap_or(constants::DEFAULT_PAGE_SIZE);
-    let page = query.page.unwrap_or(constants::DEFAULT_PAGE_NUM);
-
-    let start = if page == 0 { 0 } else { page_size * (page - 1) };
-    let end = page_size * page;
-    opts.slice = Some(format!("{}..{}", start, end));
-
-    let diff = api::local::diff::diff_entries(
-        &repository,
-        base_entry,
-        &base_commit,
-        head_entry,
-        &head_commit,
-        opts,
-    )?;
-
-    let view = CompareEntryResponse {
-        status: StatusMessage::resource_found(),
-        compare: diff,
-    };
-    Ok(HttpResponse::Ok().json(view))
-}
-
 pub async fn create_df_compare(
     req: HttpRequest,
     _query: web::Query<DFOptsQuery>,
