@@ -44,7 +44,7 @@ pub fn compare(
         compare_entry_2.commit_entry = Some(entry_2);
     };
 
-    let _compare: crate::view::compare::CompareTabular = api::local::compare::compare_files(
+    api::local::compare::compare_files(
         repo,
         None,
         compare_entry_1,

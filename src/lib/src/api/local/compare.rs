@@ -15,6 +15,7 @@ use std::path::PathBuf;
 
 pub mod hash_compare;
 pub mod join_compare;
+pub mod utf8_compare;
 
 const LEFT: &str = "left";
 const RIGHT: &str = "right";
@@ -29,67 +30,29 @@ const DUPES_PATH: &str = "dupes.json";
 pub fn compare_files(
     repo: &LocalRepository,
     compare_id: Option<&str>,
-    compare_entry_1: CompareEntry,
-    compare_entry_2: CompareEntry,
+    entry_1: CompareEntry,
+    entry_2: CompareEntry,
     keys: Vec<String>,
     targets: Vec<String>,
     output: Option<PathBuf>,
-) -> Result<CompareTabular, OxenError> {
+) -> Result<Option<CompareTabular>, OxenError> {
     // Assert that the files exist in their respective commits and are tabular.
-    let version_file_1 = get_version_file(repo, &compare_entry_1)?;
-    let version_file_2 = get_version_file(repo, &compare_entry_2)?;
+    let version_file_1 = get_version_file(repo, &entry_1)?;
+    let version_file_2 = get_version_file(repo, &entry_2)?;
 
-    if !util::fs::is_tabular(&version_file_1) || !util::fs::is_tabular(&version_file_2) {
+    if util::fs::is_tabular(&version_file_1) && util::fs::is_tabular(&version_file_2) {
+        let compare = compare_tabular(repo, compare_id, entry_1, entry_2, keys, targets, output)?;
+        Ok(Some(compare))
+    } else if util::fs::is_utf8(&version_file_1) && util::fs::is_utf8(&version_file_2) {
+        let result = utf8_compare::compare(&version_file_1, &version_file_2)?;
+        println!("{result}");
+        Ok(None)
+    } else {
         return Err(OxenError::invalid_file_type(format!(
-            "Compare not supported for non-tabular files, found {:?} and {:?}",
-            compare_entry_1.path, compare_entry_2.path
+            "Compare not supported for files, found {:?} and {:?}",
+            entry_1.path, entry_2.path
         )));
     }
-
-    // Read DFs and get schemas
-    let df_1 = tabular::read_df(&version_file_1, DFOpts::empty())?;
-    let df_2 = tabular::read_df(&version_file_2, DFOpts::empty())?;
-
-    let schema_1 = Schema::from_polars(&df_1.schema());
-    let schema_2 = Schema::from_polars(&df_2.schema());
-
-    // Subset dataframes to "keys" and "targets"
-    #[allow(clippy::map_clone)]
-    let required_fields = keys
-        .iter()
-        .chain(targets.iter())
-        .cloned()
-        .collect::<Vec<String>>();
-
-    // Make sure both dataframes have all required fields
-
-    if !schema_1.has_field_names(&required_fields) {
-        return Err(OxenError::incompatible_schemas(required_fields, schema_1));
-    };
-
-    if !schema_2.has_field_names(&required_fields) {
-        return Err(OxenError::incompatible_schemas(required_fields, schema_2));
-    };
-
-    let keys = keys.iter().map(|key| key.as_str()).collect::<Vec<&str>>();
-    let targets = targets
-        .iter()
-        .map(|target| target.as_str())
-        .collect::<Vec<&str>>();
-
-    let compare = compute_row_comparison(
-        repo,
-        compare_id,
-        df_1,
-        df_2,
-        compare_entry_1,
-        compare_entry_2,
-        keys,
-        targets,
-        output,
-    )?;
-
-    Ok(compare)
 }
 
 pub fn get_cached_compare(
@@ -231,22 +194,80 @@ pub fn get_compare_dir(repo: &LocalRepository, compare_id: &str) -> PathBuf {
         .join(compare_id)
 }
 
-pub fn get_compare_match_path(repo: &LocalRepository, compare_id: &str) -> PathBuf {
+fn compare_tabular(
+    repo: &LocalRepository,
+    compare_id: Option<&str>,
+    compare_entry_1: CompareEntry,
+    compare_entry_2: CompareEntry,
+    keys: Vec<String>,
+    targets: Vec<String>,
+    output: Option<PathBuf>,
+) -> Result<CompareTabular, OxenError> {
+    // Read DFs and get schemas
+    let version_file_1 = get_version_file(repo, &compare_entry_1)?;
+    let version_file_2 = get_version_file(repo, &compare_entry_2)?;
+
+    let df_1 = tabular::read_df(version_file_1, DFOpts::empty())?;
+    let df_2 = tabular::read_df(version_file_2, DFOpts::empty())?;
+
+    let schema_1 = Schema::from_polars(&df_1.schema());
+    let schema_2 = Schema::from_polars(&df_2.schema());
+
+    // Subset dataframes to "keys" and "targets"
+    #[allow(clippy::map_clone)]
+    let required_fields = keys
+        .iter()
+        .chain(targets.iter())
+        .cloned()
+        .collect::<Vec<String>>();
+
+    // Make sure both dataframes have all required fields
+
+    if !schema_1.has_field_names(&required_fields) {
+        return Err(OxenError::incompatible_schemas(required_fields, schema_1));
+    };
+
+    if !schema_2.has_field_names(&required_fields) {
+        return Err(OxenError::incompatible_schemas(required_fields, schema_2));
+    };
+
+    let keys = keys.iter().map(|key| key.as_str()).collect::<Vec<&str>>();
+    let targets = targets
+        .iter()
+        .map(|target| target.as_str())
+        .collect::<Vec<&str>>();
+
+    let compare = compute_row_comparison(
+        repo,
+        compare_id,
+        df_1,
+        df_2,
+        compare_entry_1,
+        compare_entry_2,
+        keys,
+        targets,
+        output,
+    )?;
+
+    Ok(compare)
+}
+
+fn get_compare_match_path(repo: &LocalRepository, compare_id: &str) -> PathBuf {
     let compare_dir = get_compare_dir(repo, compare_id);
     compare_dir.join("match.parquet")
 }
 
-pub fn get_compare_diff_path(repo: &LocalRepository, compare_id: &str) -> PathBuf {
+fn get_compare_diff_path(repo: &LocalRepository, compare_id: &str) -> PathBuf {
     let compare_dir = get_compare_dir(repo, compare_id);
     compare_dir.join("diff.parquet")
 }
 
-pub fn get_compare_left_path(repo: &LocalRepository, compare_id: &str) -> PathBuf {
+fn get_compare_left_path(repo: &LocalRepository, compare_id: &str) -> PathBuf {
     let compare_dir = get_compare_dir(repo, compare_id);
     compare_dir.join("left_only.parquet")
 }
 
-pub fn get_compare_right_path(repo: &LocalRepository, compare_id: &str) -> PathBuf {
+fn get_compare_right_path(repo: &LocalRepository, compare_id: &str) -> PathBuf {
     let compare_dir = get_compare_dir(repo, compare_id);
     compare_dir.join("right_only.parquet")
 }
