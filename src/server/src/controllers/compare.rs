@@ -27,6 +27,7 @@ use crate::params::{
     self, app_data, df_opts_query, parse_base_head, path_param, resolve_base_head, DFOptsQuery,
     PageNumQuery,
 };
+use liboxen::model::entry::commit_entry::CompareEntry;
 
 pub async fn commits(
     req: HttpRequest,
@@ -166,15 +167,26 @@ pub async fn create_df_compare(
             OxenError::ResourceNotFound(format!("{}@{}", resource_2.display(), commit_2).into())
         })?;
 
+    let cpath_1 = CompareEntry {
+        commit_entry: Some(entry_1),
+        path: resource_1,
+    };
+
+    let cpath_2 = CompareEntry {
+        commit_entry: Some(entry_2),
+        path: resource_2,
+    };
+
     let compare = api::local::compare::compare_files(
         &repository,
         Some(&compare_id),
-        entry_1,
-        entry_2,
+        cpath_1,
+        cpath_2,
         keys,
         targets,
         None,
-    )?;
+    )?
+    .ok_or_else(|| OxenError::basic_str("Error creating comparison"))?;
 
     let mut messages: Vec<OxenMessage> = vec![];
 
@@ -227,11 +239,21 @@ pub async fn get_df_compare(
         OxenError::ResourceNotFound(format!("{}@{}", data.right_resource, right_commit).into())
     })?;
 
+    let cpath_1 = CompareEntry {
+        commit_entry: Some(left_entry.clone()),
+        path: left_entry.path,
+    };
+
+    let cpath_2 = CompareEntry {
+        commit_entry: Some(right_entry.clone()),
+        path: right_entry.path,
+    };
+
     let maybe_cached_compare = api::local::compare::get_cached_compare(
         &repository,
         &compare_id,
-        &left_entry,
-        &right_entry,
+        cpath_1.clone(),
+        cpath_2.clone(),
     )?;
 
     let view = match maybe_cached_compare {
@@ -254,12 +276,13 @@ pub async fn get_df_compare(
             let compare = api::local::compare::compare_files(
                 &repository,
                 Some(&compare_id),
-                left_entry,
-                right_entry,
+                cpath_1,
+                cpath_2,
                 data.keys,
                 data.targets,
                 None,
-            )?;
+            )?
+            .ok_or_else(|| OxenError::basic_str("Error creating comparison"))?;
 
             let mut messages: Vec<OxenMessage> = vec![];
 

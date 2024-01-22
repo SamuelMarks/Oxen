@@ -1,3 +1,4 @@
+use crate::api::local::diff;
 use crate::error::OxenError;
 
 use polars::prelude::ChunkCompare;
@@ -19,7 +20,7 @@ pub fn compare(
     let left_only_df = calculate_left_df(&joined_df, targets.clone(), keys.clone())?;
     let right_only_df = calculate_right_df(&joined_df, targets.clone(), keys.clone())?;
 
-    Ok((match_df, diff_df, left_only_df, right_only_df))
+    Ok((diff_df, match_df, left_only_df, right_only_df))
 }
 
 fn join_hashed_dfs(
