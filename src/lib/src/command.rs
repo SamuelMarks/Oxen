@@ -12,7 +12,6 @@ pub mod compare;
 pub mod config;
 pub mod db_inspect;
 pub mod df;
-pub mod diff;
 pub mod fetch;
 pub mod helpers;
 pub mod info;
@@ -37,7 +36,6 @@ pub use crate::command::clone::{clone, clone_url, deep_clone_url, shallow_clone_
 pub use crate::command::commit::commit;
 pub use crate::command::compare::compare;
 pub use crate::command::df::{df, schema};
-pub use crate::command::diff::diff;
 pub use crate::command::fetch::fetch;
 pub use crate::command::info::info;
 pub use crate::command::init::init;

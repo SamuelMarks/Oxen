@@ -11,7 +11,6 @@ pub const CHECKOUT: &str = "checkout";
 pub const CLONE: &str = "clone";
 pub const COMMIT_CACHE: &str = "commit-cache";
 pub const COMMIT: &str = "commit";
-pub const COMPARE: &str = "compare";
 pub const CONFIG: &str = "config";
 pub const CREATE_REMOTE: &str = "create-remote";
 pub const DF: &str = "df";
@@ -805,13 +804,6 @@ pub fn pull() -> Command {
 
 pub fn diff() -> Command {
     Command::new(DIFF)
-        .about("Compare two files against each other or against versions. The first parameter can be one of three things 1) another file 2) a commit hash 3) a branch name. If the first parameter is a revision it will compare the second parameter path to that version of the file.")
-        .arg(Arg::new("FILE_OR_REVISION").required(true))
-        .arg(Arg::new("PATH").required(false))
-}
-
-pub fn compare() -> Command {
-    Command::new(COMPARE)
         .about("Compare two tabular files with some schematic overlap. The two resource paramaters can be specified by filepath or `file:revision` syntax.")
         .arg(Arg::new("RESOURCE1")
             .required(true)

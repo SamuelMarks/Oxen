@@ -11,14 +11,21 @@ use std::collections::HashMap;
 pub fn compare(
     base_df: &DataFrame,
     head_df: &DataFrame,
-    schema: &Schema,
+    schema_1: &Schema,
+    schema_2: &Schema,
 ) -> Result<(DataFrame, DataFrame, DataFrame, DataFrame), OxenError> {
+    if schema_1.hash != schema_2.hash {
+        return Err(OxenError::invalid_file_type(
+            "The schemas are incompatible. Specify keys and targets to compare the files",
+        ));
+    }
+
     // Compute row indices
     let (added_indices, removed_indices) = compute_new_row_indices(base_df, head_df)?;
 
     // Take added from the current df
     let added_rows = if !added_indices.is_empty() {
-        let opts = DFOpts::from_schema_columns(schema);
+        let opts = DFOpts::from_schema_columns(schema_1);
         let head_df = tabular::transform(head_df.clone(), opts)?;
         tabular::take(head_df.lazy(), added_indices)?
     } else {
@@ -27,7 +34,7 @@ pub fn compare(
 
     // Take removed from versioned df
     let removed_rows = if !removed_indices.is_empty() {
-        let opts = DFOpts::from_schema_columns(schema);
+        let opts = DFOpts::from_schema_columns(schema_1);
         let base_df = tabular::transform(base_df.clone(), opts)?;
         tabular::take(base_df.lazy(), removed_indices.clone())?
     } else {

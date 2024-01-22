@@ -1,4 +1,3 @@
-use crate::api::local::diff;
 use crate::error::OxenError;
 
 use polars::prelude::ChunkCompare;

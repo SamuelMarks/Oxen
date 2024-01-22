@@ -945,10 +945,9 @@ pub async fn pull(sub_matches: &ArgMatches) {
 
 pub async fn remote_diff(sub_matches: &ArgMatches) {
     let is_remote = true;
-    p_diff(sub_matches, is_remote).await
 }
 
-pub async fn compare(sub_matches: &ArgMatches) {
+pub async fn diff(sub_matches: &ArgMatches) {
     let resource1 = sub_matches
         .get_one::<String>("RESOURCE1")
         .expect("required");
@@ -978,38 +977,10 @@ pub async fn compare(sub_matches: &ArgMatches) {
 
     let output = sub_matches.get_one::<String>("output").map(PathBuf::from);
 
-    match dispatch::compare(file1, revision1, file2, revision2, keys, targets, output) {
+    match dispatch::diff(file1, revision1, file2, revision2, keys, targets, output) {
         Ok(_) => {}
         Err(err) => {
             eprintln!("{err}")
-        }
-    }
-}
-
-pub async fn diff(sub_matches: &ArgMatches) {
-    let is_remote = false;
-    p_diff(sub_matches, is_remote).await
-}
-
-async fn p_diff(sub_matches: &ArgMatches, is_remote: bool) {
-    // First arg is optional
-    let file_or_commit_id = sub_matches
-        .get_one::<String>("FILE_OR_REVISION")
-        .expect("required");
-    let path = sub_matches.get_one::<String>("PATH");
-    if let Some(path) = path {
-        match dispatch::diff(Some(file_or_commit_id), path, is_remote).await {
-            Ok(_) => {}
-            Err(err) => {
-                eprintln!("{err}")
-            }
-        }
-    } else {
-        match dispatch::diff(None, file_or_commit_id, is_remote).await {
-            Ok(_) => {}
-            Err(err) => {
-                eprintln!("{err}")
-            }
         }
     }
 }

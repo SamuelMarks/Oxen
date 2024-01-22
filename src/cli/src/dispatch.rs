@@ -501,21 +501,7 @@ pub async fn pull(remote: &str, branch: &str, all: bool) -> Result<(), OxenError
     Ok(())
 }
 
-pub async fn diff(commit_id: Option<&str>, path: &str, remote: bool) -> Result<(), OxenError> {
-    let repo_dir = env::current_dir().unwrap();
-    let repository = LocalRepository::from_dir(&repo_dir)?;
-    let path = Path::new(path);
-
-    let result = if remote {
-        command::remote::diff(&repository, commit_id, path).await?
-    } else {
-        command::diff(&repository, commit_id, path)?
-    };
-    println!("{result}");
-    Ok(())
-}
-
-pub fn compare(
+pub fn diff(
     file_1: PathBuf,
     revision_1: Option<&str>,
     file_2: Option<PathBuf>,
@@ -564,11 +550,11 @@ pub fn compare(
 
         (
             CommitPath {
-                commit,
+                commit: None,
                 path: file_1.clone(),
             },
             CommitPath {
-                commit: None,
+                commit,
                 path: file_1.clone(),
             },
         )

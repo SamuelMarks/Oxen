@@ -5,7 +5,6 @@ use colored::Colorize;
 use difference::{Changeset, Difference};
 use std::path::PathBuf;
 
-// pub fn compare() -> Result<CompareUtf8, OxenError> {}
 pub fn compare(version_file_1: &PathBuf, version_file_2: &PathBuf) -> Result<String, OxenError> {
     let original_data = util::fs::read_from_path(version_file_1)?;
     let compare_data = util::fs::read_from_path(version_file_2)?;

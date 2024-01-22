@@ -421,7 +421,7 @@ fn compute_row_comparison(
     let mut dupes = CompareDupes { left: 0, right: 0 };
 
     let (mut diff_df, mut match_df, mut left_only_df, mut right_only_df) = if keys.is_empty() {
-        hash_compare::compare(&df_1, &df_2, &og_schema_1.schema)?
+        hash_compare::compare(&df_1, &df_2, &og_schema_1.schema, &og_schema_2.schema)?
     } else {
         // TODO: unsure if hash comparison or join is faster here - would guess join, could use some testing
         let (df_1, df_2) = hash_dfs(df_1, df_2, keys.clone(), targets.clone())?;
