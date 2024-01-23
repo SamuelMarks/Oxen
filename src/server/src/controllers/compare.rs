@@ -130,7 +130,6 @@ pub async fn create_df_compare(
     let app_data = app_data(&req)?;
     let namespace = path_param(&req, "namespace")?;
     let name = path_param(&req, "repo_name")?;
-    let base_head = path_param(&req, "base_head")?;
     let repository = get_repo(&app_data.path, namespace, name)?;
 
     let data: Result<TabularCompareBody, serde_json::Error> = serde_json::from_str(&body);
@@ -146,17 +145,16 @@ pub async fn create_df_compare(
         }
     };
 
-    let resource_1 = PathBuf::from(data.left_resource);
-    let resource_2 = PathBuf::from(data.right_resource);
+    let resource_1 = PathBuf::from(data.left.path);
+    let resource_2 = PathBuf::from(data.right.path);
     let keys = data.keys;
-    let targets = data.targets;
+    let targets = data.compare;
     let compare_id = data.compare_id;
 
-    let (commit_1, commit_2) = params::parse_base_head(&base_head)?;
-    let commit_1 = api::local::revisions::get(&repository, &commit_1)?
-        .ok_or_else(|| OxenError::revision_not_found(commit_1.into()))?;
-    let commit_2 = api::local::revisions::get(&repository, &commit_2)?
-        .ok_or_else(|| OxenError::revision_not_found(commit_2.into()))?;
+    let commit_1 = api::local::revisions::get(&repository, &data.left.version)?
+        .ok_or_else(|| OxenError::revision_not_found(data.left.version.into()))?;
+    let commit_2 = api::local::revisions::get(&repository, &data.right.version)?
+        .ok_or_else(|| OxenError::revision_not_found(data.right.version.into()))?;
 
     let entry_1 = api::local::entries::get_commit_entry(&repository, &commit_1, &resource_1)?
         .ok_or_else(|| {
@@ -176,6 +174,11 @@ pub async fn create_df_compare(
         commit_entry: Some(entry_2),
         path: resource_2,
     };
+
+    // TODO: Remove the next two lines when we want to allow mapping
+    // different keys and targets from left and right file.
+    let keys = keys.iter().map(|k| k.left.clone()).collect();
+    let targets = targets.iter().map(|t| t.left.clone()).collect();
 
     let compare = api::local::compare::compare_files(
         &repository,
@@ -225,18 +228,18 @@ pub async fn get_df_compare(
     let left_entry = api::local::entries::get_commit_entry(
         &repository,
         &left_commit,
-        &PathBuf::from(data.left_resource.clone()),
+        &PathBuf::from(data.left.path.clone()),
     )?
     .ok_or_else(|| {
-        OxenError::ResourceNotFound(format!("{}@{}", data.left_resource, left_commit).into())
+        OxenError::ResourceNotFound(format!("{}@{}", data.left.path, left_commit).into())
     })?;
     let right_entry = api::local::entries::get_commit_entry(
         &repository,
         &right_commit,
-        &PathBuf::from(data.right_resource.clone()),
+        &PathBuf::from(data.right.path.clone()),
     )?
     .ok_or_else(|| {
-        OxenError::ResourceNotFound(format!("{}@{}", data.right_resource, right_commit).into())
+        OxenError::ResourceNotFound(format!("{}@{}", data.right.path, right_commit).into())
     })?;
 
     let cpath_1 = CompareEntry {
@@ -273,13 +276,18 @@ pub async fn get_df_compare(
         }
         None => {
             log::debug!("cache miss");
+            // TODO: Remove the next two lines when we want to allow mapping
+            // different keys and targets from left and right file.
+            let keys = data.keys.iter().map(|k| k.left.clone()).collect();
+            let targets = data.compare.iter().map(|t| t.left.clone()).collect();
+
             let compare = api::local::compare::compare_files(
                 &repository,
                 Some(&compare_id),
                 cpath_1,
                 cpath_2,
-                data.keys,
-                data.targets,
+                keys,
+                targets,
                 None,
             )?
             .ok_or_else(|| OxenError::basic_str("Error creating comparison"))?;
