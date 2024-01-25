@@ -7,8 +7,8 @@ const TARGETS_HASH_COL: &str = "_targets_hash";
 const KEYS_HASH_COL: &str = "_keys_hash";
 
 pub fn compare(
-    df_1: DataFrame,
-    df_2: DataFrame,
+    df_1: &DataFrame,
+    df_2: &DataFrame,
     targets: Vec<&str>,
     keys: Vec<&str>,
 ) -> Result<(DataFrame, DataFrame, DataFrame, DataFrame), OxenError> {
@@ -23,11 +23,11 @@ pub fn compare(
 }
 
 fn join_hashed_dfs(
-    left_df: DataFrame,
-    right_df: DataFrame,
+    left_df: &DataFrame,
+    right_df: &DataFrame,
     targets: Vec<&str>,
 ) -> Result<DataFrame, OxenError> {
-    let mut joined_df = left_df.outer_join(&right_df, [KEYS_HASH_COL], [KEYS_HASH_COL])?;
+    let mut joined_df = left_df.outer_join(right_df, [KEYS_HASH_COL], [KEYS_HASH_COL])?;
 
     let mut cols_to_rename = targets.clone();
     cols_to_rename.push(TARGETS_HASH_COL);

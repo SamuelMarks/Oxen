@@ -1,4 +1,5 @@
 use liboxen::api;
+use liboxen::api::local::compare::CompareStrategy;
 use liboxen::command;
 use liboxen::command::migrate::CreateMerkleTreesMigration;
 use liboxen::command::migrate::Migrate;
@@ -502,6 +503,7 @@ pub async fn pull(remote: &str, branch: &str, all: bool) -> Result<(), OxenError
 }
 
 pub fn diff(
+    compare_strategy: CompareStrategy,
     file_1: PathBuf,
     revision_1: Option<&str>,
     file_2: Option<PathBuf>,
@@ -560,7 +562,15 @@ pub fn diff(
         )
     };
 
-    command::compare(&repository, cpath_1, cpath_2, keys, targets, output)?;
+    command::compare(
+        compare_strategy,
+        &repository,
+        cpath_1,
+        cpath_2,
+        keys,
+        targets,
+        output,
+    )?;
     Ok(())
 }
 

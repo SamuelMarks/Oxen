@@ -7,6 +7,7 @@
 use crate::cmd_setup::{ADD, COMMIT, DF, DIFF, DOWNLOAD, LOG, LS, METADATA, RESTORE, RM, STATUS};
 use crate::dispatch;
 use clap::ArgMatches;
+use liboxen::api::local::compare::CompareStrategy;
 use liboxen::command::migrate::{
     CacheDataFrameSizeMigration, CreateMerkleTreesMigration, Migrate, PropagateSchemasMigration,
     UpdateVersionFilesMigration,
@@ -965,19 +966,44 @@ pub async fn diff(sub_matches: &ArgMatches) {
         None => (None, None),
     };
 
+    let compare_strategy = match sub_matches.get_one::<bool>("join") {
+        Some(true) => CompareStrategy::Join,
+        _ => CompareStrategy::Hash,
+    };
+
     let keys: Vec<String> = match sub_matches.get_many::<String>("keys") {
         Some(values) => values.cloned().collect(),
         None => Vec::new(),
     };
 
-    let targets: Vec<String> = match sub_matches.get_many::<String>("targets") {
-        Some(values) => values.cloned().collect(),
-        None => Vec::new(),
+    let targets = sub_matches.get_many::<String>("targets");
+    let targets: Vec<String> = match (&compare_strategy, targets) {
+        (CompareStrategy::Hash, Some(_)) => {
+            eprintln!(
+                "Targets can only be specified when comparing using the `join diff` strategy."
+            );
+            return;
+        }
+        (CompareStrategy::Join, None) => {
+            eprintln!("Targets must be specified when comparing using he `join diff` strategy.");
+            return;
+        }
+        (CompareStrategy::Join, Some(values)) => values.cloned().collect(),
+        _ => Vec::new(),
     };
 
     let output = sub_matches.get_one::<String>("output").map(PathBuf::from);
 
-    match dispatch::diff(file1, revision1, file2, revision2, keys, targets, output) {
+    match dispatch::diff(
+        compare_strategy,
+        file1,
+        revision1,
+        file2,
+        revision2,
+        keys,
+        targets,
+        output,
+    ) {
         Ok(_) => {}
         Err(err) => {
             eprintln!("{err}")

@@ -1,10 +1,12 @@
 use crate::api;
+use crate::api::local::compare::CompareStrategy;
 use crate::error::OxenError;
 use crate::model::entry::commit_entry::{CommitPath, CompareEntry};
 use crate::model::LocalRepository;
 use std::path::PathBuf;
 
 pub fn compare(
+    compare_strategy: CompareStrategy,
     repo: &LocalRepository,
     cpath_1: CommitPath,
     cpath_2: CommitPath,
@@ -45,6 +47,7 @@ pub fn compare(
     };
 
     api::local::compare::compare_files(
+        compare_strategy,
         repo,
         None,
         compare_entry_1,

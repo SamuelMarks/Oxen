@@ -12,7 +12,7 @@ use liboxen::model::{Commit, DataFrameSize, LocalRepository, Schema};
 use liboxen::opts::df_opts::DFOptsView;
 use liboxen::opts::DFOpts;
 use liboxen::view::compare::{
-    CompareCommits, CompareCommitsResponse, CompareEntries, CompareEntryResponse,
+    CompareCommits, CompareCommitsResponse, CompareEntries, CompareEntryResponse, CompareResult,
     CompareTabularResponse,
 };
 use liboxen::view::json_data_frame_view::{DFResourceType, DerivedDFResource, JsonDataFrameSource};
@@ -180,7 +180,8 @@ pub async fn create_df_compare(
     let keys = keys.iter().map(|k| k.left.clone()).collect();
     let targets = targets.iter().map(|t| t.left.clone()).collect();
 
-    let compare = api::local::compare::compare_files(
+    let result = api::local::compare::compare_files(
+        api::local::compare::CompareStrategy::Join,
         &repository,
         Some(&compare_id),
         cpath_1,
@@ -188,19 +189,23 @@ pub async fn create_df_compare(
         keys,
         targets,
         None,
-    )?
-    .ok_or_else(|| OxenError::basic_str("Error creating comparison"))?;
+    )?;
 
-    let mut messages: Vec<OxenMessage> = vec![];
+    let view = match result {
+        CompareResult::Tabular(compare) => {
+            let mut messages: Vec<OxenMessage> = vec![];
 
-    if compare.dupes.left > 0 || compare.dupes.right > 0 {
-        messages.push(compare.dupes.clone().to_message());
-    }
+            if compare.dupes.left > 0 || compare.dupes.right > 0 {
+                messages.push(compare.dupes.clone().to_message());
+            }
 
-    let view = CompareTabularResponse {
-        status: StatusMessage::resource_found(),
-        dfs: compare,
-        messages,
+            CompareTabularResponse {
+                status: StatusMessage::resource_found(),
+                dfs: compare,
+                messages,
+            }
+        }
+        _ => Err(OxenError::basic_str("Wrong comparison type"))?,
     };
 
     Ok(HttpResponse::Ok().json(view))
@@ -281,7 +286,8 @@ pub async fn get_df_compare(
             let keys = data.keys.iter().map(|k| k.left.clone()).collect();
             let targets = data.compare.iter().map(|t| t.left.clone()).collect();
 
-            let compare = api::local::compare::compare_files(
+            let result = api::local::compare::compare_files(
+                api::local::compare::CompareStrategy::Join,
                 &repository,
                 Some(&compare_id),
                 cpath_1,
@@ -289,19 +295,23 @@ pub async fn get_df_compare(
                 keys,
                 targets,
                 None,
-            )?
-            .ok_or_else(|| OxenError::basic_str("Error creating comparison"))?;
+            )?;
 
-            let mut messages: Vec<OxenMessage> = vec![];
+            match result {
+                CompareResult::Tabular(compare) => {
+                    let mut messages: Vec<OxenMessage> = vec![];
 
-            if compare.dupes.left > 0 || compare.dupes.right > 0 {
-                messages.push(compare.dupes.clone().to_message());
-            }
+                    if compare.dupes.left > 0 || compare.dupes.right > 0 {
+                        messages.push(compare.dupes.clone().to_message());
+                    }
 
-            CompareTabularResponse {
-                status: StatusMessage::resource_found(),
-                dfs: compare,
-                messages,
+                    CompareTabularResponse {
+                        status: StatusMessage::resource_found(),
+                        dfs: compare,
+                        messages,
+                    }
+                }
+                _ => Err(OxenError::basic_str("Wrong comparison type"))?,
             }
         }
     };

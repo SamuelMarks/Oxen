@@ -72,6 +72,19 @@ pub struct CompareTabular {
     pub dupes: CompareDupes,
 }
 
+pub enum CompareResult {
+    Tabular(CompareTabular),
+    Text(String),
+}
+
+pub struct CompareTabularRaw {
+    pub diff_df: DataFrame,
+    pub match_df: DataFrame,
+    pub left_only_df: DataFrame,
+    pub right_only_df: DataFrame,
+    pub dupes: CompareDupes,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CompareDupes {
     pub left: u64,
