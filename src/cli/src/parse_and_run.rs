@@ -946,9 +946,14 @@ pub async fn pull(sub_matches: &ArgMatches) {
 
 pub async fn remote_diff(sub_matches: &ArgMatches) {
     let is_remote = true;
+    p_diff(sub_matches, is_remote).await
 }
 
 pub async fn diff(sub_matches: &ArgMatches) {
+    let is_remote = false;
+    p_diff(sub_matches, is_remote).await
+}
+async fn p_diff(sub_matches: &ArgMatches, is_remote: bool) {
     let resource1 = sub_matches
         .get_one::<String>("RESOURCE1")
         .expect("required");
@@ -1003,7 +1008,10 @@ pub async fn diff(sub_matches: &ArgMatches) {
         keys,
         targets,
         output,
-    ) {
+        is_remote,
+    )
+    .await
+    {
         Ok(_) => {}
         Err(err) => {
             eprintln!("{err}")

@@ -501,8 +501,8 @@ fn build_compare_tabular(
     let left_only_schema = Schema::from_polars(&left_only_df.schema());
     let right_only_schema = Schema::from_polars(&right_only_df.schema());
 
-    let df_1_size = DataFrameSize::from_df(&df_1);
-    let df_2_size = DataFrameSize::from_df(&df_2);
+    let df_1_size = DataFrameSize::from_df(df_1);
+    let df_2_size = DataFrameSize::from_df(df_2);
     let og_schema_1 = Schema::from_polars(&df_1.schema());
     let og_schema_2 = Schema::from_polars(&df_2.schema());
 
@@ -719,35 +719,26 @@ mod tests {
 
     #[test]
     fn test_compare_fails_when_not_tabular() -> Result<(), OxenError> {
-        test::run_bounding_box_csv_repo_test_fully_committed(|repo| {
-            let hello_file = repo.path.join("Hello.txt");
-            let world_file = repo.path.join("World.txt");
-            test::write_txt_file_to_path(&hello_file, "Hello")?;
-            test::write_txt_file_to_path(&world_file, "World")?;
+        test::run_training_data_repo_test_fully_committed(|repo| {
+            let hello_file = "train/dog_1.jpg";
+            let world_file = "train/dog_2.jpg";
 
-            command::add(&repo, &hello_file)?;
-            command::add(&repo, &world_file)?;
+            test::test_img_file_with_name(hello_file);
+            test::test_img_file_with_name(world_file);
 
-            command::commit(&repo, "adding_new_files")?;
+            let hello_file = PathBuf::from(hello_file);
+            let world_file = PathBuf::from(world_file);
 
             let head_commit = api::local::commits::head_commit(&repo)?;
 
             let keys = vec![];
             let targets = vec![];
 
-            let entry_left = api::local::entries::get_commit_entry(
-                &repo,
-                &head_commit,
-                &PathBuf::from("Hello.txt"),
-            )?
-            .unwrap();
+            let entry_left =
+                api::local::entries::get_commit_entry(&repo, &head_commit, &hello_file)?.unwrap();
 
-            let entry_right = api::local::entries::get_commit_entry(
-                &repo,
-                &head_commit,
-                &PathBuf::from("World.txt"),
-            )?
-            .unwrap();
+            let entry_right =
+                api::local::entries::get_commit_entry(&repo, &head_commit, &world_file)?.unwrap();
 
             let compare_entry_1 = CompareEntry {
                 commit_entry: Some(entry_left),
@@ -768,10 +759,9 @@ mod tests {
                 keys,
                 targets,
                 None,
-            )?;
+            );
 
-            // TOOD : FIX TEST
-            // assert!(matches!(result.unwrap_err(), OxenError::InvalidFileType(_)));
+            assert!(matches!(result.unwrap_err(), OxenError::InvalidFileType(_)));
 
             Ok(())
         })

@@ -8,12 +8,11 @@ use liboxen::core::index::{CommitReader, Merger};
 use liboxen::error::OxenError;
 use liboxen::message::OxenMessage;
 use liboxen::model::compare::tabular_compare::TabularCompareBody;
-use liboxen::model::{Commit, DataFrameSize, LocalRepository, Schema};
+use liboxen::model::{DataFrameSize, Schema};
 use liboxen::opts::df_opts::DFOptsView;
 use liboxen::opts::DFOpts;
 use liboxen::view::compare::{
-    CompareCommits, CompareCommitsResponse, CompareEntries, CompareEntryResponse, CompareResult,
-    CompareTabularResponse,
+    CompareCommits, CompareCommitsResponse, CompareEntries, CompareResult, CompareTabularResponse,
 };
 use liboxen::view::json_data_frame_view::{DFResourceType, DerivedDFResource, JsonDataFrameSource};
 use liboxen::view::{
@@ -24,7 +23,7 @@ use liboxen::{api, constants, util};
 
 use crate::helpers::get_repo;
 use crate::params::{
-    self, app_data, df_opts_query, parse_base_head, path_param, resolve_base_head, DFOptsQuery,
+    app_data, df_opts_query, parse_base_head, path_param, resolve_base_head, DFOptsQuery,
     PageNumQuery,
 };
 use liboxen::model::entry::commit_entry::CompareEntry;
@@ -442,50 +441,4 @@ pub async fn get_derived_df(
             Err(OxenHttpError::InternalServerError)
         }
     }
-}
-
-fn parse_base_head_resource(
-    repo: &LocalRepository,
-    base_head: &str,
-) -> Result<(Commit, Commit, PathBuf), OxenError> {
-    log::debug!("Parsing base_head_resource: {}", base_head);
-
-    let mut split = base_head.split("..");
-    let base = split
-        .next()
-        .ok_or(OxenError::resource_not_found(base_head))?;
-    let head = split
-        .next()
-        .ok_or(OxenError::resource_not_found(base_head))?;
-
-    let base_commit = api::local::revisions::get(repo, base)?
-        .ok_or(OxenError::revision_not_found(base.into()))?;
-
-    // Split on / and find longest branch name
-    let split_head = head.split('/');
-    let mut longest_str = String::from("");
-    let mut head_commit: Option<Commit> = None;
-    let mut resource: Option<PathBuf> = None;
-
-    for s in split_head {
-        let maybe_revision = format!("{}{}", longest_str, s);
-        log::debug!("Checking maybe head revision: {}", maybe_revision);
-        let commit = api::local::revisions::get(repo, &maybe_revision)?;
-        if commit.is_some() {
-            head_commit = commit;
-            let mut r_str = head.replace(&maybe_revision, "");
-            // remove first char from r_str
-            r_str.remove(0);
-            resource = Some(PathBuf::from(r_str));
-        }
-        longest_str = format!("{}/", maybe_revision);
-    }
-
-    log::debug!("Got head_commit: {:?}", head_commit);
-    log::debug!("Got resource: {:?}", resource);
-
-    let head_commit = head_commit.ok_or(OxenError::revision_not_found(head.into()))?;
-    let resource = resource.ok_or(OxenError::revision_not_found(head.into()))?;
-
-    Ok((base_commit, head_commit, resource))
 }

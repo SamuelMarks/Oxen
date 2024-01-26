@@ -502,7 +502,8 @@ pub async fn pull(remote: &str, branch: &str, all: bool) -> Result<(), OxenError
     Ok(())
 }
 
-pub fn diff(
+#[allow(clippy::too_many_arguments)]
+pub async fn diff(
     compare_strategy: CompareStrategy,
     file_1: PathBuf,
     revision_1: Option<&str>,
@@ -511,6 +512,7 @@ pub fn diff(
     keys: Vec<String>,
     targets: Vec<String>,
     output: Option<PathBuf>,
+    is_remote: bool,
 ) -> Result<(), OxenError> {
     let repo_dir = env::current_dir().unwrap();
     let repository = LocalRepository::from_dir(&repo_dir)?;
@@ -562,15 +564,21 @@ pub fn diff(
         )
     };
 
-    command::compare(
-        compare_strategy,
-        &repository,
-        cpath_1,
-        cpath_2,
-        keys,
-        targets,
-        output,
-    )?;
+    if is_remote {
+        let result = command::remote::diff(&repository, revision_1, &file_1).await?;
+        println!("{result}");
+    } else {
+        command::compare(
+            compare_strategy,
+            &repository,
+            cpath_1,
+            cpath_2,
+            keys,
+            targets,
+            output,
+        )?;
+    }
+
     Ok(())
 }
 
