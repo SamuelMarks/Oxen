@@ -700,13 +700,23 @@ pub fn any_val_to_bytes(value: &AnyValue) -> Vec<u8> {
     }
 }
 
-pub fn df_hash_rows(df: DataFrame) -> Result<DataFrame, OxenError> {
+pub fn df_hash_rows(df: DataFrame, keys: Option<Vec<&str>>) -> Result<DataFrame, OxenError> {
     let num_rows = df.height() as i64;
 
     let mut col_names = vec![];
     let schema = df.schema();
-    for field in schema.iter_fields() {
-        col_names.push(col(field.name()));
+
+    match keys {
+        Some(keys) => {
+            for key in keys {
+                col_names.push(col(key));
+            }
+        }
+        None => {
+            for field in schema.iter_fields() {
+                col_names.push(col(field.name()));
+            }
+        }
     }
     // println!("Hashing: {:?}", col_names);
     // println!("{:?}", df);

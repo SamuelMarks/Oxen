@@ -3,21 +3,19 @@ use serde::{Deserialize, Serialize};
 use crate::core::df::tabular;
 use crate::core::index::object_db_reader::ObjectDBReader;
 use crate::core::index::CommitDirEntryReader;
+use crate::core::index::CommitEntryReader;
 use crate::error::OxenError;
 use crate::model::diff::diff_entry_status::DiffEntryStatus;
-use crate::model::diff::generic_diff::GenericDiff;
 use crate::model::{Commit, CommitEntry, DataFrameDiff, DiffEntry, LocalRepository, Schema};
 use crate::opts::DFOpts;
 use crate::view::compare::AddRemoveModifyCounts;
 use crate::view::Pagination;
 use crate::{constants, util};
 
-use crate::core::index::CommitEntryReader;
-use colored::Colorize;
-use difference::{Changeset, Difference};
 use polars::export::ahash::HashMap;
 use polars::prelude::DataFrame;
 use polars::prelude::IntoLazy;
+
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -79,8 +77,8 @@ pub fn get_version_file_from_commit_id(
 
 pub fn count_added_rows(base_df: DataFrame, head_df: DataFrame) -> Result<usize, OxenError> {
     // Hash the rows
-    let base_df = tabular::df_hash_rows(base_df)?;
-    let head_df = tabular::df_hash_rows(head_df)?;
+    let base_df = tabular::df_hash_rows(base_df, None)?;
+    let head_df = tabular::df_hash_rows(head_df, None)?;
 
     // log::debug!("count_added_rows got base_df {}", base_df);
     // log::debug!("count_added_rows got head_df {}", head_df);
@@ -111,8 +109,8 @@ pub fn count_added_rows(base_df: DataFrame, head_df: DataFrame) -> Result<usize,
 
 pub fn count_removed_rows(base_df: DataFrame, head_df: DataFrame) -> Result<usize, OxenError> {
     // Hash the rows
-    let base_df = tabular::df_hash_rows(base_df)?;
-    let head_df = tabular::df_hash_rows(head_df)?;
+    let base_df = tabular::df_hash_rows(base_df, None)?;
+    let head_df = tabular::df_hash_rows(head_df, None)?;
 
     // log::debug!("count_removed_rows got base_df {}", base_df);
     // log::debug!("count_removed_rows got head_df {}", head_df);
@@ -149,8 +147,8 @@ pub fn compute_new_row_indices(
     head_df: &DataFrame,
 ) -> Result<(Vec<u32>, Vec<u32>), OxenError> {
     // Hash the rows
-    let base_df = tabular::df_hash_rows(base_df.clone())?;
-    let head_df = tabular::df_hash_rows(head_df.clone())?;
+    let base_df = tabular::df_hash_rows(base_df.clone(), None)?;
+    let head_df = tabular::df_hash_rows(head_df.clone(), None)?;
 
     log::debug!("diff_current got current hashes base_df {:?}", base_df);
     log::debug!("diff_current got current hashes head_df {:?}", head_df);

@@ -46,7 +46,7 @@ pub fn compare_files(
     targets: Vec<String>,
     output: Option<PathBuf>,
 ) -> Result<CompareResult, OxenError> {
-    // Assert that the files exist in their respective commits and are tabular.
+    // Assert that the files exist in their respective commits.
     let file_1 = get_version_file(repo, &compare_entry_1)?;
     let file_2 = get_version_file(repo, &compare_entry_2)?;
 
@@ -414,7 +414,9 @@ fn compute_row_comparison(
     let mut dupes = CompareDupes { left: 0, right: 0 };
 
     let dataframes = match strategy {
-        CompareStrategy::Hash => hash_compare::compare(df_1, df_2, &schema_1, &schema_2)?,
+        CompareStrategy::Hash => {
+            hash_compare::compare(df_1, df_2, &schema_1, &schema_2, keys.to_owned())?
+        }
         CompareStrategy::Join => {
             // TODO: unsure if hash comparison or join is faster here - would guess join, could use some testing
             let (df_1, df_2) = hash_dfs(

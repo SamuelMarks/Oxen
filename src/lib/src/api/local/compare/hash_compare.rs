@@ -13,6 +13,7 @@ pub fn compare(
     head_df: &DataFrame,
     schema_1: &Schema,
     schema_2: &Schema,
+    keys: Vec<&str>,
 ) -> Result<(DataFrame, DataFrame, DataFrame, DataFrame), OxenError> {
     if schema_1.hash != schema_2.hash {
         return Err(OxenError::invalid_file_type(
@@ -21,7 +22,7 @@ pub fn compare(
     }
 
     // Compute row indices
-    let (added_indices, removed_indices) = compute_new_row_indices(base_df, head_df)?;
+    let (added_indices, removed_indices) = compute_new_row_indices(base_df, head_df, keys)?;
 
     // Take added from the current df
     let added_rows = if !added_indices.is_empty() {
@@ -52,10 +53,11 @@ pub fn compare(
 fn compute_new_row_indices(
     base_df: &DataFrame,
     head_df: &DataFrame,
+    keys: Vec<&str>,
 ) -> Result<(Vec<u32>, Vec<u32>), OxenError> {
     // Hash the rows
-    let base_df = tabular::df_hash_rows(base_df.clone())?;
-    let head_df = tabular::df_hash_rows(head_df.clone())?;
+    let base_df = tabular::df_hash_rows(base_df.clone(), Some(keys.clone()))?;
+    let head_df = tabular::df_hash_rows(head_df.clone(), Some(keys.clone()))?;
 
     log::debug!("diff_current got current hashes base_df {:?}", base_df);
     log::debug!("diff_current got current hashes head_df {:?}", head_df);
