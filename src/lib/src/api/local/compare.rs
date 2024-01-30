@@ -67,7 +67,6 @@ pub fn compare_files(
         Ok(CompareResult::Tabular(result))
     } else if is_files_utf8(&file_1, &file_2) {
         let result = utf8_compare::compare(&file_1, &file_2)?;
-        println!("{result}");
 
         Ok(CompareResult::Text(result))
     } else {
@@ -90,7 +89,7 @@ fn compare_tabular(
     keys: Vec<String>,
     targets: Vec<String>,
     output: Option<PathBuf>,
-) -> Result<CompareTabular, OxenError> {
+) -> Result<(CompareTabular, String), OxenError> {
     let df_1 = tabular::read_df(file_1, DFOpts::empty())?;
     let df_2 = tabular::read_df(file_2, DFOpts::empty())?;
 
@@ -116,7 +115,6 @@ fn compare_tabular(
         compare_id,
     );
 
-    maybe_print_compare_output(&strategy, &compare_tabular_raw);
     maybe_save_compare_output(&strategy, &mut compare_tabular_raw, output)?;
     maybe_write_cache(
         repo,
@@ -126,7 +124,8 @@ fn compare_tabular(
         &mut compare_tabular_raw,
     )?;
 
-    Ok(compare)
+    let compare_string = compare_to_string(&strategy, &compare_tabular_raw);
+    Ok((compare, compare_string))
 }
 
 pub fn get_cached_compare(
@@ -637,35 +636,40 @@ fn maybe_write_cache(
     Ok(())
 }
 
-fn maybe_print_compare_output(strategy: &CompareStrategy, compare_tabular_raw: &CompareTabularRaw) {
+fn compare_to_string(
+    strategy: &CompareStrategy,
+    compare_tabular_raw: &CompareTabularRaw,
+) -> String {
     let left_only_df = &compare_tabular_raw.left_only_df;
     let right_only_df = &compare_tabular_raw.right_only_df;
     let diff_df = &compare_tabular_raw.diff_df;
     let match_df = &compare_tabular_raw.match_df;
 
+    let mut results: Vec<String> = vec![];
+
     match strategy {
         CompareStrategy::Hash => {
-            println!("Added rows");
-            println!("{:?}", left_only_df);
-
-            println!("Removed rows");
-            println!("{:?}", right_only_df);
+            results.push(format!("Added Rows\n\n{left_only_df}\n\n"));
+            results.push(format!("Removed Rows\n\n{right_only_df}\n\n"));
         }
 
         CompareStrategy::Join => {
-            println!("Rows with matching keys and DIFFERENT targets");
-            println!("{:?}", diff_df);
-
-            println!("Rows with matching keys and SAME targets");
-            println!("{:?}", match_df);
-
-            println!("Rows with keys only in LEFT DataFrame");
-            println!("{:?}", left_only_df);
-
-            println!("Rows with keys only in RIGHT DataFrame");
-            println!("{:?}", right_only_df);
+            results.push(format!(
+                "Rows with matching keys and DIFFERENT targets\n\n{diff_df}\n\n"
+            ));
+            results.push(format!(
+                "Rows with matching keys and SAME targets\n\n{match_df}\n\n"
+            ));
+            results.push(format!(
+                "Rows with keys only in LEFT DataFrame\n\n{left_only_df}\n\n"
+            ));
+            results.push(format!(
+                "Rows with keys only in RIGHT DataFrame\n\n{right_only_df}\n\n"
+            ));
         }
     }
+
+    results.join("\n")
 }
 
 fn maybe_save_compare_output(
@@ -805,7 +809,7 @@ mod tests {
                 None,
             )?;
 
-            if let CompareResult::Tabular(compare) = result {
+            if let CompareResult::Tabular((compare, _)) = result {
                 // Should be updated values
                 assert_eq!(compare.derived["left_only"].size.height, 2);
                 assert_eq!(compare.derived["right_only"].size.height, 1);
@@ -931,7 +935,7 @@ mod tests {
                 None,
             )?;
 
-            if let CompareResult::Tabular(new_compare) = result {
+            if let CompareResult::Tabular((new_compare, _)) = result {
                 // Should be updated values
                 assert_eq!(new_compare.derived["left_only"].size.height, 0);
                 assert_eq!(new_compare.derived["right_only"].size.height, 6);

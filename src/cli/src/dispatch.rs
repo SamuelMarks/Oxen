@@ -564,9 +564,8 @@ pub async fn diff(
         )
     };
 
-    if is_remote {
-        let result = command::remote::diff(&repository, revision_1, &file_1).await?;
-        println!("{result}");
+    let result = if is_remote {
+        command::remote::diff(&repository, revision_1, &file_1).await?
     } else {
         command::compare(
             compare_strategy,
@@ -576,8 +575,10 @@ pub async fn diff(
             keys,
             targets,
             output,
-        )?;
-    }
+        )?
+    };
+
+    println!("{result}");
 
     Ok(())
 }

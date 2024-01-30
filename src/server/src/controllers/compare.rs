@@ -8,11 +8,12 @@ use liboxen::core::index::{CommitReader, Merger};
 use liboxen::error::OxenError;
 use liboxen::message::OxenMessage;
 use liboxen::model::compare::tabular_compare::TabularCompareBody;
-use liboxen::model::{DataFrameSize, Schema};
+use liboxen::model::{Commit, DataFrameSize, LocalRepository, Schema};
 use liboxen::opts::df_opts::DFOptsView;
 use liboxen::opts::DFOpts;
 use liboxen::view::compare::{
-    CompareCommits, CompareCommitsResponse, CompareEntries, CompareResult, CompareTabularResponse,
+    CompareCommits, CompareCommitsResponse, CompareEntries, CompareEntryResponse, CompareResult,
+    CompareTabularResponse,
 };
 use liboxen::view::json_data_frame_view::{DFResourceType, DerivedDFResource, JsonDataFrameSource};
 use liboxen::view::{
@@ -121,6 +122,52 @@ pub async fn entries(
     Ok(HttpResponse::Ok().json(view))
 }
 
+pub async fn file(
+    req: HttpRequest,
+    query: web::Query<DFOptsQuery>,
+) -> actix_web::Result<HttpResponse, OxenHttpError> {
+    let app_data = app_data(&req)?;
+    let namespace = path_param(&req, "namespace")?;
+    let name = path_param(&req, "repo_name")?;
+    let base_head = path_param(&req, "base_head")?;
+
+    // Get the repository or return error
+    let repository = get_repo(&app_data.path, namespace, name)?;
+
+    // Parse the base and head from the base..head/resource string
+    // For Example)
+    //   main..feature/add-data/path/to/file.txt
+    let (base_commit, head_commit, resource) = parse_base_head_resource(&repository, &base_head)?;
+
+    let base_entry = api::local::entries::get_commit_entry(&repository, &base_commit, &resource)?;
+    let head_entry = api::local::entries::get_commit_entry(&repository, &head_commit, &resource)?;
+
+    let mut opts = DFOpts::empty();
+    opts = df_opts_query::parse_opts(&query, &mut opts);
+
+    let page_size = query.page_size.unwrap_or(constants::DEFAULT_PAGE_SIZE);
+    let page = query.page.unwrap_or(constants::DEFAULT_PAGE_NUM);
+
+    let start = if page == 0 { 0 } else { page_size * (page - 1) };
+    let end = page_size * page;
+    opts.slice = Some(format!("{}..{}", start, end));
+
+    let diff = api::local::diff::diff_entries(
+        &repository,
+        base_entry,
+        &base_commit,
+        head_entry,
+        &head_commit,
+        opts,
+    )?;
+
+    let view = CompareEntryResponse {
+        status: StatusMessage::resource_found(),
+        compare: diff,
+    };
+    Ok(HttpResponse::Ok().json(view))
+}
+
 pub async fn create_df_compare(
     req: HttpRequest,
     _query: web::Query<DFOptsQuery>,
@@ -191,7 +238,7 @@ pub async fn create_df_compare(
     )?;
 
     let view = match result {
-        CompareResult::Tabular(compare) => {
+        CompareResult::Tabular((compare, _)) => {
             let mut messages: Vec<OxenMessage> = vec![];
 
             if compare.dupes.left > 0 || compare.dupes.right > 0 {
@@ -297,7 +344,7 @@ pub async fn get_df_compare(
             )?;
 
             match result {
-                CompareResult::Tabular(compare) => {
+                CompareResult::Tabular((compare, _)) => {
                     let mut messages: Vec<OxenMessage> = vec![];
 
                     if compare.dupes.left > 0 || compare.dupes.right > 0 {
@@ -441,4 +488,50 @@ pub async fn get_derived_df(
             Err(OxenHttpError::InternalServerError)
         }
     }
+}
+
+fn parse_base_head_resource(
+    repo: &LocalRepository,
+    base_head: &str,
+) -> Result<(Commit, Commit, PathBuf), OxenError> {
+    log::debug!("Parsing base_head_resource: {}", base_head);
+
+    let mut split = base_head.split("..");
+    let base = split
+        .next()
+        .ok_or(OxenError::resource_not_found(base_head))?;
+    let head = split
+        .next()
+        .ok_or(OxenError::resource_not_found(base_head))?;
+
+    let base_commit = api::local::revisions::get(repo, base)?
+        .ok_or(OxenError::revision_not_found(base.into()))?;
+
+    // Split on / and find longest branch name
+    let split_head = head.split('/');
+    let mut longest_str = String::from("");
+    let mut head_commit: Option<Commit> = None;
+    let mut resource: Option<PathBuf> = None;
+
+    for s in split_head {
+        let maybe_revision = format!("{}{}", longest_str, s);
+        log::debug!("Checking maybe head revision: {}", maybe_revision);
+        let commit = api::local::revisions::get(repo, &maybe_revision)?;
+        if commit.is_some() {
+            head_commit = commit;
+            let mut r_str = head.replace(&maybe_revision, "");
+            // remove first char from r_str
+            r_str.remove(0);
+            resource = Some(PathBuf::from(r_str));
+        }
+        longest_str = format!("{}/", maybe_revision);
+    }
+
+    log::debug!("Got head_commit: {:?}", head_commit);
+    log::debug!("Got resource: {:?}", resource);
+
+    let head_commit = head_commit.ok_or(OxenError::revision_not_found(head.into()))?;
+    let resource = resource.ok_or(OxenError::revision_not_found(head.into()))?;
+
+    Ok((base_commit, head_commit, resource))
 }

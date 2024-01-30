@@ -74,7 +74,7 @@ pub struct CompareTabular {
 
 #[derive(Debug)]
 pub enum CompareResult {
-    Tabular(CompareTabular),
+    Tabular((CompareTabular, String)),
     Text(String),
 }
 

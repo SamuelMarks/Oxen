@@ -3,6 +3,7 @@ use crate::api::local::compare::CompareStrategy;
 use crate::error::OxenError;
 use crate::model::entry::commit_entry::{CommitPath, CompareEntry};
 use crate::model::LocalRepository;
+use crate::view::compare::CompareResult;
 use std::path::PathBuf;
 
 pub fn compare(
@@ -13,7 +14,7 @@ pub fn compare(
     keys: Vec<String>,
     targets: Vec<String>,
     output: Option<PathBuf>,
-) -> Result<(), OxenError> {
+) -> Result<String, OxenError> {
     let mut compare_entry_1 = CompareEntry {
         commit_entry: None,
         path: cpath_1.path.clone(),
@@ -46,7 +47,7 @@ pub fn compare(
         compare_entry_2.commit_entry = Some(entry_2);
     };
 
-    api::local::compare::compare_files(
+    let compare_result = api::local::compare::compare_files(
         compare_strategy,
         repo,
         None,
@@ -56,5 +57,11 @@ pub fn compare(
         targets,
         output,
     )?;
-    Ok(())
+
+    let text = match compare_result {
+        CompareResult::Tabular((_, text)) => text,
+        CompareResult::Text(text) => text,
+    };
+
+    Ok(text)
 }
