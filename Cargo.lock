@@ -4,7 +4,7 @@ version = 3
 
 [[package]]
 name = "Oxen"
-version = "0.11.1"
+version = "0.12.2"
 dependencies = [
  "actix-files",
  "actix-http",
@@ -2756,7 +2756,7 @@ checksum = "4ec2a862134d2a7d32d7983ddcdd1c4923530833c9f2ea1a44fc5fa473989058"
 
 [[package]]
 name = "liboxen"
-version = "0.11.1"
+version = "0.12.2"
 dependencies = [
  "actix-files",
  "actix-web",
@@ -3331,7 +3331,7 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "oxen-cli"
-version = "0.11.1"
+version = "0.12.2"
 dependencies = [
  "clap",
  "colored",
@@ -3348,7 +3348,7 @@ dependencies = [
 
 [[package]]
 name = "oxen-server"
-version = "0.11.1"
+version = "0.12.2"
 dependencies = [
  "actix-files",
  "actix-http",
@@ -3997,9 +3997,9 @@ dependencies = [
 
 [[package]]
 name = "qsv-dateparser"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b36efc8e07bbf9e63709a3b309fdc6e11a667342028ebbbbe4529ae4369d018a"
+checksum = "cdda4c930de275e38f0a82c242ecfb6b0f9ac94f3055c21a1ed95063c65b0c1e"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4008,9 +4008,9 @@ dependencies = [
 
 [[package]]
 name = "qsv-sniffer"
-version = "0.10.1"
+version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16b77ad5c8e60f875ff6907937fe143093febbf481c29f2b3132c353ed69bbaf"
+checksum = "b58087514eb36f80b0b0e9a84ebb309f586567796e9ca393e8ea67b4aeb35a6e"
 dependencies = [
  "bitflags 2.4.2",
  "bytecount",

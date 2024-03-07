@@ -107,10 +107,15 @@ pub fn create_remote() -> Command {
                 .action(clap::ArgAction::Set),
         )
         .arg(
-            Arg::new("remote")
-                .long("remote")
-                .short('r')
+            Arg::new("host")
+                .long("host")
                 .help("The host you want to create the remote repository on. For example: 'hub.oxen.ai'")
+                .action(clap::ArgAction::Set),
+        )
+        .arg(
+            Arg::new("scheme")
+                .long("scheme")
+                .help("The scheme for the url of the remote repository. For example: 'https' or 'http'")
                 .action(clap::ArgAction::Set),
         )
         .arg(
@@ -818,21 +823,21 @@ pub fn diff() -> Command {
             .required(false)
             .long("keys")
             .short('k')
-            .help("Comma-separated list of columns to compare on. If not specified, all columns are used for comparison.")
+            .help("Comma-separated list of columns to compare on. If not specified, all columns are used for keys.")
             .use_value_delimiter(true)
             .action(clap::ArgAction::Set))
-        .arg(Arg::new("targets")
+        .arg(Arg::new("compares")
             .required(false)
-            .long("targets")
-            .short('t')
-            .help("Comma-separated list of columns in which to view changes. If not specified, all columns are viewed")
+            .long("compares")
+            .short('c')
+            .help("Comma-separated list of columns to compare changes between. If not specified, all columns  that are not keys are compares.")
             .use_value_delimiter(true)
             .action(clap::ArgAction::Set))
         .arg(Arg::new("output")
             .required(false)
             .long("output")
             .short('o')
-            .help("Output directory path to write the results of the comparison. Will write both match.csv (rows with same keys and targets) and diff.csv (rows with different targets between files.")
+            .help("Output directory path to write the results of the comparison. Will write both match.csv (rows with same keys and compares) and diff.csv (rows with different compares between files.")
             .action(clap::ArgAction::Set))
 }
 
